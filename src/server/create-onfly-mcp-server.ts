@@ -30,7 +30,7 @@ export function createOnflyMcpServer(): McpServer {
     },
     {
       instructions:
-        'Onfly corporate travel & expenses. Use English tool arguments. User-facing replies may follow the user language.',
+        'Onfly corporate travel & expenses. Use English tool arguments. User-facing replies may follow the user language. For questions about the user’s own last trip / latest travel expense report (RDV), call get_my_latest_rdv first instead of guessing from company-wide list_rdvs.',
     },
   );
 

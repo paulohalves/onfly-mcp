@@ -29,7 +29,7 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
     {
       title: 'List expenses',
       description:
-        'List Onfly expenditures. Defaults to the authenticated user only. Set include_company_wide true for company-wide results (requires API permission). Status: numeric or draft, awaiting_approval, …',
+        'List Onfly expenditures. Defaults to the authenticated user only (sends userId and user[] for reliable scoping). Set include_company_wide true for company-wide results (requires API permission). Status: numeric or draft, awaiting_approval, …',
       inputSchema: {
         start_date: z.string().optional().describe('YYYY-MM-DD'),
         end_date: z.string().optional().describe('YYYY-MM-DD'),
@@ -82,7 +82,10 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
       if (filterUserId === undefined && !include_company_wide) {
         filterUserId = await getAuthenticatedEmployeeId(client);
       }
-      appendParam(params, 'userId', filterUserId);
+      if (filterUserId !== undefined) {
+        appendParam(params, 'userId', filterUserId);
+        appendParam(params, 'user[]', filterUserId);
+      }
       if (rdv_id !== undefined) {
         appendParam(params, 'rdv[]', rdv_id);
       }

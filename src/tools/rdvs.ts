@@ -3,7 +3,11 @@ import * as z from 'zod';
 
 import type { TokenBucketLimiter } from '../api/rate-limiter.js';
 import { getAuthenticatedEmployeeId } from '../utils/authenticated-user.js';
-import { includeForRdv } from '../utils/include-defaults.js';
+import { includeForExpense, includeForRdv } from '../utils/include-defaults.js';
+import {
+  extractDataArray,
+  inferLatestRdvIdFromExpensesPayload,
+} from '../utils/onfly-payload.js';
 import { appendParam } from '../utils/query.js';
 import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
@@ -29,7 +33,7 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
     {
       title: 'List RDVs',
       description:
-        'List Onfly RDVs. Defaults to the authenticated user only. Set include_company_wide true for company-wide lists (requires API permission).',
+        'List Onfly RDVs. Defaults to the authenticated user only (sends userId and user[] — the API often expects user[]). For “my last trip / último RDV”, prefer get_my_latest_rdv. Set include_company_wide true for company-wide lists (requires API permission).',
       inputSchema: {
         start_date: z.string().optional(),
         end_date: z.string().optional(),
@@ -38,7 +42,9 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
           .number()
           .int()
           .optional()
-          .describe('Filter by employee id; overrides include_company_wide'),
+          .describe(
+            'Filter by employee id; when set with include_company_wide true, still scopes to this user',
+          ),
         include_company_wide: z
           .boolean()
           .optional()
@@ -79,7 +85,10 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
       if (filterUserId === undefined && !include_company_wide) {
         filterUserId = await getAuthenticatedEmployeeId(client);
       }
-      appendParam(params, 'userId', filterUserId);
+      if (filterUserId !== undefined) {
+        appendParam(params, 'userId', filterUserId);
+        appendParam(params, 'user[]', filterUserId);
+      }
       appendParam(params, 'page', page);
       appendParam(params, 'perPage', per_page);
       appendParam(params, 'include', includeForRdv(detail_level));
@@ -87,6 +96,66 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
       appendParam(params, 'sortOrder', 'DESC');
       const data = await client.get('/expense/rdv', params);
       return jsonTextResult(data);
+    },
+  );
+
+  server.registerTool(
+    'get_my_latest_rdv',
+    {
+      title: 'Get my latest RDV (last travel report)',
+      description:
+        'Returns the authenticated user’s most recent travel expense report (RDV). Uses GET /expense/rdv with user filters; if none are returned, infers an RDV id from recent GET /expense/expenditure and loads GET /expense/rdv/{id}. For “última viagem / last trip report”.',
+      inputSchema: {
+        detail_level: z.enum(['basic', 'full']).optional().default('basic'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ detail_level }, extra) => {
+      const client = newClient(extra, limiter);
+      const userId = await getAuthenticatedEmployeeId(client);
+      const listParams = new URLSearchParams();
+      appendParam(listParams, 'userId', userId);
+      appendParam(listParams, 'user[]', userId);
+      appendParam(listParams, 'page', 1);
+      appendParam(listParams, 'perPage', 1);
+      appendParam(listParams, 'include', includeForRdv(detail_level));
+      appendParam(listParams, 'sortBy', 'id');
+      appendParam(listParams, 'sortOrder', 'DESC');
+      const listPayload = await client.get('/expense/rdv', listParams);
+      const fromList = pickFirstRdvRecord(listPayload);
+      if (fromList !== undefined) {
+        return jsonTextResult({ resolved_via: 'rdv_list', rdv: fromList });
+      }
+      const expParams = new URLSearchParams();
+      appendParam(expParams, 'userId', userId);
+      appendParam(expParams, 'user[]', userId);
+      appendParam(expParams, 'page', 1);
+      appendParam(expParams, 'perPage', 80);
+      appendParam(expParams, 'include', includeForExpense(detail_level));
+      appendParam(expParams, 'sortBy', 'id');
+      appendParam(expParams, 'sortOrder', 'DESC');
+      const expensePayload = await client.get('/expense/expenditure', expParams);
+      const inferredId = inferLatestRdvIdFromExpensesPayload(expensePayload);
+      if (inferredId === undefined) {
+        return jsonTextResult({
+          resolved_via: 'none',
+          detail:
+            'No RDV in list and no RDV linked on recent expenses. Check dates, permissions, or specify an RDV id.',
+        });
+      }
+      const rdvParams = new URLSearchParams();
+      appendParam(rdvParams, 'include', includeForRdv(detail_level));
+      const rdv = await client.get(`/expense/rdv/${inferredId}`, rdvParams);
+      return jsonTextResult({
+        resolved_via: 'expense_fallback',
+        inferred_rdv_id: inferredId,
+        rdv,
+      });
     },
   );
 
@@ -172,4 +241,9 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
       return jsonTextResult(data);
     },
   );
+}
+
+function pickFirstRdvRecord(listPayload: unknown): unknown | undefined {
+  const rows = extractDataArray(listPayload);
+  return rows.length > 0 ? rows[0] : undefined;
 }
