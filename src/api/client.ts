@@ -47,6 +47,35 @@ export class OnflyApiClient {
     return this.request('POST', path, { body, search });
   }
 
+  /**
+   * Multipart POST (e.g. Onfly `POST /general/attachment/4/1/{id}` with form field `file`).
+   * Do not set Content-Type manually — `fetch` adds the boundary.
+   */
+  async postFormData(path: string, form: FormData): Promise<unknown> {
+    await this.limiter.acquire();
+    const url = `${this.baseUrl}${path}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: 'application/json',
+      },
+      body: form,
+    });
+    const text = await res.text().catch(() => '');
+    if (!res.ok) {
+      throw new Error(`Onfly API ${res.status}: ${text || res.statusText}`);
+    }
+    if (!text) {
+      return {};
+    }
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { raw: text };
+    }
+  }
+
   put(path: string, body?: unknown, search?: URLSearchParams): Promise<unknown> {
     return this.request('PUT', path, { body, search });
   }

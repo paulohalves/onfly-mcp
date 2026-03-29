@@ -45,3 +45,32 @@ export function inferLatestRdvIdFromExpensesPayload(payload: unknown): number | 
   }
   return best;
 }
+
+function readId(obj: unknown): number | undefined {
+  if (obj === null || typeof obj !== 'object') {
+    return undefined;
+  }
+  const raw = (obj as Record<string, unknown>).id;
+  if (typeof raw === 'number' && Number.isInteger(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) {
+    return Number.parseInt(raw, 10);
+  }
+  return undefined;
+}
+
+/** Id from POST /expense/expenditure-style responses (root or wrapped `data`). */
+export function readCreatedEntityId(payload: unknown): number | undefined {
+  const direct = readId(payload);
+  if (direct !== undefined) {
+    return direct;
+  }
+  if (payload !== null && typeof payload === 'object') {
+    const data = (payload as Record<string, unknown>).data;
+    if (data !== null && typeof data === 'object' && !Array.isArray(data)) {
+      return readId(data);
+    }
+  }
+  return undefined;
+}

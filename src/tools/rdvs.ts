@@ -3,11 +3,8 @@ import * as z from 'zod';
 
 import type { TokenBucketLimiter } from '../api/rate-limiter.js';
 import { getAuthenticatedEmployeeId } from '../utils/authenticated-user.js';
-import { includeForExpense, includeForRdv } from '../utils/include-defaults.js';
-import {
-  extractDataArray,
-  inferLatestRdvIdFromExpensesPayload,
-} from '../utils/onfly-payload.js';
+import { includeForRdv } from '../utils/include-defaults.js';
+import { fetchLatestRdvForUser } from '../utils/latest-rdv.js';
 import { appendParam } from '../utils/query.js';
 import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
@@ -117,44 +114,14 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
     },
     async ({ detail_level }, extra) => {
       const client = newClient(extra, limiter);
-      const userId = await getAuthenticatedEmployeeId(client);
-      const listParams = new URLSearchParams();
-      appendParam(listParams, 'userId', userId);
-      appendParam(listParams, 'user[]', userId);
-      appendParam(listParams, 'page', 1);
-      appendParam(listParams, 'perPage', 1);
-      appendParam(listParams, 'include', includeForRdv(detail_level));
-      appendParam(listParams, 'sortBy', 'id');
-      appendParam(listParams, 'sortOrder', 'DESC');
-      const listPayload = await client.get('/expense/rdv', listParams);
-      const fromList = pickFirstRdvRecord(listPayload);
-      if (fromList !== undefined) {
-        return jsonTextResult({ resolved_via: 'rdv_list', rdv: fromList });
+      const result = await fetchLatestRdvForUser(client, detail_level);
+      if (!result.ok) {
+        return jsonTextResult({ resolved_via: 'none', detail: result.detail });
       }
-      const expParams = new URLSearchParams();
-      appendParam(expParams, 'userId', userId);
-      appendParam(expParams, 'user[]', userId);
-      appendParam(expParams, 'page', 1);
-      appendParam(expParams, 'perPage', 80);
-      appendParam(expParams, 'include', includeForExpense(detail_level));
-      appendParam(expParams, 'sortBy', 'id');
-      appendParam(expParams, 'sortOrder', 'DESC');
-      const expensePayload = await client.get('/expense/expenditure', expParams);
-      const inferredId = inferLatestRdvIdFromExpensesPayload(expensePayload);
-      if (inferredId === undefined) {
-        return jsonTextResult({
-          resolved_via: 'none',
-          detail:
-            'No RDV in list and no RDV linked on recent expenses. Check dates, permissions, or specify an RDV id.',
-        });
-      }
-      const rdvParams = new URLSearchParams();
-      appendParam(rdvParams, 'include', includeForRdv(detail_level));
-      const rdv = await client.get(`/expense/rdv/${inferredId}`, rdvParams);
       return jsonTextResult({
-        resolved_via: 'expense_fallback',
-        inferred_rdv_id: inferredId,
-        rdv,
+        resolved_via: result.resolved_via,
+        ...(result.resolved_via === 'expense_fallback' ? { inferred_rdv_id: result.rdv_id } : {}),
+        rdv: result.rdv,
       });
     },
   );
@@ -243,7 +210,3 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
   );
 }
 
-function pickFirstRdvRecord(listPayload: unknown): unknown | undefined {
-  const rows = extractDataArray(listPayload);
-  return rows.length > 0 ? rows[0] : undefined;
-}

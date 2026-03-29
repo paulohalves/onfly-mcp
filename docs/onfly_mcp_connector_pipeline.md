@@ -870,7 +870,7 @@ SUBMISSÃO DIRECTORY:
 - `GET /expense/expenditure` — Listar despesas (filtros: data, status, userId, rdv, ids)
 - `GET /expense/expenditure/{id}` — Despesa por ID
 - `POST /expense/expenditure` — Criar despesa
-- `POST /general/attachment/4/1/{expenditure_id}` — Adicionar anexo
+- `POST /general/attachment/4/1/{expenditure_id}` — Adicionar anexo (**Body form-data**, campo `file`; não é JSON/base64 no body)
 
 ### RDVs (Relatórios de Viagem)
 - `GET /expense/rdv` — Listar RDVs (filtros: data, status, criação, atualização)
