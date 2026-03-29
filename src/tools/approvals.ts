@@ -100,4 +100,28 @@ export function registerApprovalTools(server: McpServer, limiter: TokenBucketLim
       return jsonTextResult(data);
     },
   );
+
+  server.registerTool(
+    'pay_request',
+    {
+      title: 'Pay approval request',
+      description:
+        'Mark an approval item as paid by slug (POST /general/approval/pay/{slug}).',
+      inputSchema: {
+        slug: z.string().min(1),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ slug }, extra) => {
+      const client = newClient(extra, limiter);
+      const path = `/general/approval/pay/${encodeURIComponent(slug)}`;
+      const data = await client.post(path, {});
+      return jsonTextResult(data);
+    },
+  );
 }

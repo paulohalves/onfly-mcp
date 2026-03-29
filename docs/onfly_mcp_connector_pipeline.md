@@ -835,7 +835,7 @@ SUBMISSÃO DIRECTORY:
 ## Apêndice B: Endpoints da API Onfly (Referência Completa)
 
 ### Autenticação
-- `POST /oauth/token` — Login (client_credentials ou password)
+- O servidor MCP usa **Bearer token** já obtido fora do conector (Authorization Code + PKCE ou fluxo da sua aplicação). **Não** expomos `POST /oauth/token` (client credentials / password) como tool MCP.
 
 ### Colaboradores
 - `GET /employees` — Listar todos (paginado, filtros por email, id)

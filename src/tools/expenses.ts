@@ -9,6 +9,8 @@ import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
 import { jsonTextResult, newClient } from './common.js';
 
+const bodyRecord = z.record(z.string(), z.unknown());
+
 const expenseStatusInput = z.union([
   z.number().int(),
   z.enum([
@@ -183,6 +185,31 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
         payload.rdvId = rdv_id;
       }
       const data = await client.post('/expense/expenditure', payload);
+      return jsonTextResult(data);
+    },
+  );
+
+  server.registerTool(
+    'attach_to_expense',
+    {
+      title: 'Attach file to expense',
+      description:
+        'POST /general/attachment/4/1/{expenditure_id} — upload payload per Onfly API (e.g. file metadata).',
+      inputSchema: {
+        expenditure_id: z.number().int(),
+        body: bodyRecord,
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ expenditure_id, body }, extra) => {
+      const client = newClient(extra, limiter);
+      const path = `/general/attachment/4/1/${expenditure_id}`;
+      const data = await client.post(path, body);
       return jsonTextResult(data);
     },
   );

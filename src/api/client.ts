@@ -46,4 +46,12 @@ export class OnflyApiClient {
   post(path: string, body?: unknown, search?: URLSearchParams): Promise<unknown> {
     return this.request('POST', path, { body, search });
   }
+
+  put(path: string, body?: unknown, search?: URLSearchParams): Promise<unknown> {
+    return this.request('PUT', path, { body, search });
+  }
+
+  delete(path: string, search?: URLSearchParams): Promise<unknown> {
+    return this.request('DELETE', path, { search });
+  }
 }

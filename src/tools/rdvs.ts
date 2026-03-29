@@ -9,6 +9,8 @@ import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
 import { jsonTextResult, newClient } from './common.js';
 
+const bodyRecord = z.record(z.string(), z.unknown());
+
 const rdvStatusInput = z.union([
   z.number().int(),
   z.enum([
@@ -144,6 +146,29 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
         payload.costCenterId = cost_center_id;
       }
       const data = await client.post('/expense/rdv', payload);
+      return jsonTextResult(data);
+    },
+  );
+
+  server.registerTool(
+    'update_rdv',
+    {
+      title: 'Update RDV',
+      description: 'PUT /expense/rdv/{id} — body per Onfly API.',
+      inputSchema: {
+        id: z.number().int(),
+        body: bodyRecord,
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ id, body }, extra) => {
+      const client = newClient(extra, limiter);
+      const data = await client.put(`/expense/rdv/${id}`, body);
       return jsonTextResult(data);
     },
   );
