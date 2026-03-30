@@ -17,6 +17,54 @@ import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
 import { jsonTextResult, newClient } from './common.js';
 
+/** Decoded attachment size limit (Onfly platform). */
+const MAX_EXPENSE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Files larger than this threshold are sent via multipart (collection_multipart) even when
+ * upload_mode is web_app_json, because embedding them in JSON requires a synchronous
+ * JSON.stringify of 13+ MiB that blocks the Node.js event loop long enough to trigger
+ * Claude Desktop's 4-minute MCP timeout.
+ */
+const MULTIPART_THRESHOLD_BYTES = 512 * 1024;
+
+function attachmentTooLargeResult(decodedBytes: number): ReturnType<typeof jsonTextResult> {
+  return jsonTextResult({
+    success: false,
+    error: `Attachment exceeds Onfly maximum size (${MAX_EXPENSE_ATTACHMENT_BYTES / 1024 / 1024} MiB decoded; got ${decodedBytes} bytes).`,
+    max_decoded_bytes: MAX_EXPENSE_ATTACHMENT_BYTES,
+    decoded_bytes: decodedBytes,
+  });
+}
+
+/** Paths like `/mnt/user-data/...` exist in the assistant runtime, not on the MCP server host. */
+function isAssistantSandboxFilePath(filePath: string): boolean {
+  return /^\/mnt\/user-data\//i.test(filePath);
+}
+
+function errnoCode(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const c = (err as { code?: unknown }).code;
+    return typeof c === 'string' ? c : undefined;
+  }
+  return undefined;
+}
+
+/** Explains why file_path failed (e.g. Claude upload paths are not on the MCP host). */
+function hintForAttachFilePathError(filePath: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = errnoCode(err);
+  const isEnoent = code === 'ENOENT' || /ENOENT/i.test(message);
+
+  if (isEnoent && isAssistantSandboxFilePath(filePath)) {
+    return 'This path exists in the assistant/chat sandbox, not on the host running onfly-mcp. Do not use `file_path` for it. Send the receipt in `file` as a full data URL (`data:image/jpeg;base64,...`) or raw base64, with `filename`.';
+  }
+  if (isEnoent) {
+    return '`file_path` must be readable on the same machine as the MCP server, not a path only visible to the client. For images supplied in chat, use `file` with base64/data URL.';
+  }
+  return 'Check read permissions on the MCP host. For images from chat, prefer `file` (data URL or base64) instead of `file_path`.';
+}
+
 const attachmentFileSchema = z.object({
   file: z
     .string()
@@ -265,7 +313,7 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
     {
       title: 'Attach file to expense',
       description:
-        'Web (default): same JSON as the Onfly SPA — `POST .../general/attachments/4/1/{expenditure_id}/true` with `{ "files": [ { "file": "<data URL or base64>", "filename": "..." } ] }`. Tool args use the same names as that JSON: **`file`** (value for `files[].file`) and **`filename`**, or **`files`** (DevTools array). For large files, prefer **`file_path`** so the server reads and encodes the file locally (avoids chat truncation). If web mode fails for single-file upload, the tool auto-retries legacy multipart and returns the fallback result. `collection_multipart` → multipart field `file` at `.../general/attachment/4/1/{id}`.',
+        'Preferred flow (same as Onfly web app): `POST .../general/attachments/4/1/{expenditure_id}/true` with `{ "files": [ { "file": "<data URL or base64>", "filename": "..." } ] }`. Use args **`file`** + **`filename`**, or **`files`**. Max **10 MiB decoded** per file (Onfly). Onfly never accepts a path string; **`file_path`** is MCP-only (server reads local bytes on MCP host, then uploads bytes). Chat-only paths such as `/mnt/user-data/...` cannot be used — pass **`file`** as data URL/base64. Optional fallback mode: `collection_multipart` → multipart field `file` at `POST /general/attachment/4/1/{expenditure_id}` (same shape as `curl --form \'file=@/path/local.jpeg\'`).',
       inputSchema: z
         .object({
           expenditure_id: z.number().int(),
@@ -274,7 +322,7 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
             .optional()
             .default('web_app_json')
             .describe(
-              'web_app_json → JSON body with `files` (browser). collection_multipart → legacy multipart.',
+              'Preferred: web_app_json (`/general/attachments/.../true` + JSON `files[]`, same as web app). Optional: collection_multipart (`/general/attachment/...` + multipart field `file`).',
             ),
           files: z
             .array(attachmentFileSchema)
@@ -294,7 +342,7 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
             .min(1)
             .optional()
             .describe(
-              'Local absolute/relative path to the file. Server reads bytes and builds data URL automatically. Ignored when `files` or `file` are provided.',
+              'Not an Onfly field. MCP-only: readable path on the MCP host; server reads bytes then posts as multipart `file` (equivalent to curl `file=@path`). Ignored when `files` or `file` are provided. Never assistant-only paths (e.g. `/mnt/user-data/...`).',
             ),
           filename: z
             .string()
@@ -322,6 +370,14 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
               path: ['file'],
             });
           }
+          if (v.file_path && isAssistantSandboxFilePath(v.file_path)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'file_path is under /mnt/user-data/... (assistant sandbox only). onfly-mcp cannot read it. Retry without file_path: set `file` to a full data URL (data:image/jpeg;base64,...) or raw base64, and keep `filename`.',
+              path: ['file_path'],
+            });
+          }
           if (v.upload_mode === 'collection_multipart' && hasFiles && v.files!.length > 1) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
@@ -347,6 +403,9 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
       if (!files?.length && !singleAttachmentPayload && file_path) {
         try {
           const bytes = await readFile(file_path);
+          if (bytes.length > MAX_EXPENSE_ATTACHMENT_BYTES) {
+            return attachmentTooLargeResult(bytes.length);
+          }
           const mime = guessMimeTypeFromPath(file_path, content_type);
           singleAttachmentPayload = `data:${mime};base64,${bytes.toString('base64')}`;
           if (filename === 'receipt.jpg') {
@@ -357,6 +416,8 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
           return jsonTextResult({
             success: false,
             error: `Could not read file_path: ${message}`,
+            file_path: file_path,
+            hint: hintForAttachFilePathError(file_path, err),
           });
         }
       }
@@ -383,8 +444,11 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
               },
             ];
         let totalBytes = 0;
+        const decodedBuffers: Buffer[] = [];
         try {
           for (const entry of filesPayload) {
+            // Yield the event loop before decoding each large base64 chunk
+            await new Promise<void>((r) => setImmediate(r));
             const decoded = decodeBase64ToBuffer(entry.file);
             if (decoded.length === 0) {
               return jsonTextResult({
@@ -393,7 +457,11 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
                   'One attachment decoded to empty bytes — base64/data URL is likely truncated or invalid.',
               });
             }
+            if (decoded.length > MAX_EXPENSE_ATTACHMENT_BYTES) {
+              return attachmentTooLargeResult(decoded.length);
+            }
             totalBytes += decoded.length;
+            decodedBuffers.push(decoded);
           }
         } catch {
           return jsonTextResult({
@@ -401,68 +469,81 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
             error: 'Could not decode one of the attachments.',
           });
         }
-        const payload = { files: filesPayload };
-        try {
-          const data = await client.post(path, payload);
-          return jsonTextResult({
-            success: true,
-            upload_mode: 'web_app_json',
-            path,
-            api: data,
-            bytes_uploaded: totalBytes,
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          if (filesPayload.length !== 1) {
-            return jsonTextResult({
-              success: false,
-              error: message,
-              upload_mode: 'web_app_json',
-              fallback_attempted: false,
-              next_step:
-                'Retry with upload_mode=collection_multipart and a single attachment, or send one file per request.',
-            });
-          }
 
-          // Automatic fallback to legacy multipart avoids agent dead-ends on tenant-specific API behavior.
-          const fallbackPath = `/general/attachment/4/1/${expenditure_id}`;
+        // Large single-file uploads: embedding base64 in JSON requires a synchronous
+        // JSON.stringify of 13+ MiB that blocks the event loop and causes MCP timeouts.
+        // Route to multipart instead (sends binary bytes, no re-serialization to JSON).
+        const autoMultipart =
+          filesPayload.length === 1 && (decodedBuffers[0]?.length ?? 0) > MULTIPART_THRESHOLD_BYTES;
+
+        if (!autoMultipart) {
+          const payload = { files: filesPayload };
           try {
-            const first = filesPayload[0]!;
-            const fallbackBytes = decodeBase64ToBuffer(first.file);
-            const fallbackMime =
-              first.file.trim().toLowerCase().startsWith('data:') && first.file.includes(';')
-                ? first.file.trim().slice(5, first.file.indexOf(';'))
-                : content_type;
-            const fallbackFile = new File([new Uint8Array(fallbackBytes)], first.filename, {
-              type: fallbackMime,
-            });
-            const fallbackForm = new FormData();
-            fallbackForm.append('file', fallbackFile, first.filename);
-
-            const fallbackData = await client.postFormData(fallbackPath, fallbackForm);
+            const data = await client.post(path, payload);
             return jsonTextResult({
               success: true,
-              upload_mode: 'collection_multipart',
-              fallback_from: 'web_app_json',
-              path: fallbackPath,
-              api: fallbackData,
-              bytes_uploaded: fallbackBytes.length,
-              warning: `Primary upload failed in web_app_json: ${message}`,
-            });
-          } catch (fallbackErr) {
-            const fallbackMessage =
-              fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-            return jsonTextResult({
-              success: false,
               upload_mode: 'web_app_json',
-              error: message,
-              fallback_attempted: true,
-              fallback_mode: 'collection_multipart',
-              fallback_error: fallbackMessage,
-              next_step:
-                'Verify expenditure_id/token and try again with file_path to avoid truncated base64 payloads.',
+              path,
+              api: data,
+              bytes_uploaded: totalBytes,
             });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            if (filesPayload.length !== 1) {
+              return jsonTextResult({
+                success: false,
+                error: message,
+                upload_mode: 'web_app_json',
+                fallback_attempted: false,
+                next_step:
+                  'Retry with upload_mode=collection_multipart and a single attachment, or send one file per request.',
+              });
+            }
+            // Fall through to single-file multipart fallback below
           }
+        }
+
+        // Single-file path: multipart (auto-routed for large files, or fallback after web_app_json error).
+        const fallbackPath = `/general/attachment/4/1/${expenditure_id}`;
+        try {
+          const first = filesPayload[0]!;
+          const buf = decodedBuffers[0] ?? decodeBase64ToBuffer(first.file);
+          const fallbackMime =
+            first.file.trim().toLowerCase().startsWith('data:') && first.file.includes(';')
+              ? first.file.trim().slice(5, first.file.indexOf(';'))
+              : content_type;
+          const fallbackFile = new File([new Uint8Array(buf)], first.filename, {
+            type: fallbackMime,
+          });
+          const fallbackForm = new FormData();
+          fallbackForm.append('file', fallbackFile, first.filename);
+
+          const fallbackData = await client.postFormData(fallbackPath, fallbackForm);
+          return jsonTextResult({
+            success: true,
+            upload_mode: 'collection_multipart',
+            ...(autoMultipart
+              ? { note: 'Auto-routed to multipart: file > 512KB avoids large JSON.stringify.' }
+              : { fallback_from: 'web_app_json' }),
+            path: fallbackPath,
+            api: fallbackData,
+            bytes_uploaded: buf.length,
+          });
+        } catch (fallbackErr) {
+          const fallbackMessage =
+            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          return jsonTextResult({
+            success: false,
+            upload_mode: autoMultipart ? 'collection_multipart' : 'web_app_json',
+            error: autoMultipart
+              ? fallbackMessage
+              : `web_app_json failed; fallback also failed: ${fallbackMessage}`,
+            fallback_attempted: !autoMultipart,
+            fallback_mode: 'collection_multipart',
+            fallback_error: autoMultipart ? undefined : fallbackMessage,
+            next_step:
+              'Verify expenditure_id and token. For chat-only paths, use `file` (data URL / base64), not file_path.',
+          });
         }
       }
 
@@ -481,6 +562,9 @@ export function registerExpenseTools(server: McpServer, limiter: TokenBucketLimi
           success: false,
           error: 'Decoded file is empty.',
         });
+      }
+      if (buffer.length > MAX_EXPENSE_ATTACHMENT_BYTES) {
+        return attachmentTooLargeResult(buffer.length);
       }
 
       const path = `/general/attachment/4/1/${expenditure_id}`;

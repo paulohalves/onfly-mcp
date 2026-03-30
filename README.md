@@ -30,13 +30,15 @@ Servidor **MCP remoto** (transporte **Streamable HTTP**) que expõe a API REST d
 
 ## Por que é seguro (no seu ambiente)
 
-| Camada | O que faz |
-|--------|-----------|
-| **Token no servidor** | O access token Onfly não é embutido nas tools; chega por header ou `.env` local (dev). |
-| **HTTPS para Onfly** | Tráfego para `api.onfly.com` (ou URL do tenant) sobre TLS. |
-| **PII** | Helper de resposta tenta redigir campos sensíveis antes de devolver ao modelo. |
-| **Rate limit** | *Token bucket* por processo, alinhado à orientação Onfly (~200 requisições / 30 min). |
+
+| Camada                | O que faz                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| **Token no servidor** | O access token Onfly não é embutido nas tools; chega por header ou `.env` local (dev).         |
+| **HTTPS para Onfly**  | Tráfego para `api.onfly.com` (ou URL do tenant) sobre TLS.                                     |
+| **PII**               | Helper de resposta tenta redigir campos sensíveis antes de devolver ao modelo.                 |
+| **Rate limit**        | *Token bucket* por processo, alinhado à orientação Onfly (~200 requisições / 30 min).          |
 | **Sem OAuth no repo** | A integração parte do princípio de que você já tem um token válido (fluxo da sua organização). |
+
 
 ---
 
@@ -76,7 +78,7 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Por padrão, o servidor fica disponível em **`http://127.0.0.1:3000/mcp`**. Se você definir `MCP_DEBUG=1`, o comando `npm run dev` exibe no terminal os métodos e as tools invocadas, sem expor o token.
+Por padrão, o servidor fica disponível em `**http://127.0.0.1:3000/mcp**`. Se você definir `MCP_DEBUG=1`, o comando `npm run dev` exibe no terminal os métodos e as tools invocadas, sem expor o token.
 
 ### Opção 2: Build + execução compilada
 
@@ -99,11 +101,13 @@ O Claude Desktop usa **stdio**. Para conectar ao `onfly-mcp` via HTTP, use o `mc
 
 **Caminho do `claude_desktop_config.json`:**
 
-| Sistema | Caminho |
-|--------|---------|
-| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| **Linux** | `~/.config/Claude/claude_desktop_config.json` |
-| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+| Sistema     | Caminho                                                           |
+| ----------- | ----------------------------------------------------------------- |
+| **macOS**   | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Linux**   | `~/.config/Claude/claude_desktop_config.json`                     |
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json`                     |
+
 
 **Exemplo base (`mcpServers`):**
 
@@ -118,7 +122,7 @@ O Claude Desktop usa **stdio**. Para conectar ao `onfly-mcp` via HTTP, use o `mc
 }
 ```
 
-**`<NPX_PATH>` por sistema:**
+`**<NPX_PATH>` por sistema:**
 
 - **macOS:** use o caminho retornado por `which npx` (ex.: `/usr/local/bin/npx`).
 - **Linux:** use o caminho retornado por `which npx` (ex.: `/usr/bin/npx`).
@@ -148,20 +152,22 @@ Se você estiver em desenvolvimento com `ONFLY_DEV_ACCESS_TOKEN` no servidor, po
 
 ## Configuração
 
-| Variável | Descrição | Padrão |
-|----------|-----------|---------|
-| `ONFLY_API_BASE_URL` | URL base da API | `https://api.onfly.com` |
-| `ONFLY_DEV_ACCESS_TOKEN` | Token estático só para desenvolvimento (evita enviar o header em cada requisição) | vazio |
-| `MCP_PORT` | Porta HTTP | `3000` |
-| `MCP_HOST` | *Bind* (usar `0.0.0.0` só em redes confiáveis) | `127.0.0.1` |
-| `MCP_DEBUG` | `1` ou `true` — log de método/tool (params com chaves PII redigidas) | — |
-| `MCP_STATELESS` | `1` — um POST = sessão nova, sem `Mcp-Session-Id` | *off* (stateful) |
 
-Em **produção**, use sempre **`Authorization: Bearer <token>`** em cada requisição a `/mcp` e evite `ONFLY_DEV_ACCESS_TOKEN` em arquivos compartilhados.
+| Variável                 | Descrição                                                                         | Padrão                  |
+| ------------------------ | --------------------------------------------------------------------------------- | ----------------------- |
+| `ONFLY_API_BASE_URL`     | URL base da API                                                                   | `https://api.onfly.com` |
+| `ONFLY_DEV_ACCESS_TOKEN` | Token estático só para desenvolvimento (evita enviar o header em cada requisição) | vazio                   |
+| `MCP_PORT`               | Porta HTTP                                                                        | `3000`                  |
+| `MCP_HOST`               | *Bind* (usar `0.0.0.0` só em redes confiáveis)                                    | `127.0.0.1`             |
+| `MCP_DEBUG`              | `1` ou `true` — log de método/tool (params com chaves PII redigidas)              | —                       |
+| `MCP_STATELESS`          | `1` — um POST = sessão nova, sem `Mcp-Session-Id`                                 | *off* (stateful)        |
+
+
+Em **produção**, use sempre `**Authorization: Bearer <token>*`* em cada requisição a `/mcp` e evite `ONFLY_DEV_ACCESS_TOKEN` em arquivos compartilhados.
 
 ### Stateful vs stateless
 
-- **Stateful (padrão):** após `initialize`, o cliente deve enviar o header **`Mcp-Session-Id`**; suporta SSE em `GET /mcp`.
+- **Stateful (padrão):** após `initialize`, o cliente deve enviar o header `**Mcp-Session-Id`**; suporta SSE em `GET /mcp`.
 - **Stateless (`MCP_STATELESS=1`):** cada `POST /mcp` cria transporte novo; `GET /mcp` responde 405 — útil para clientes simples que não gerem sessão.
 
 ---
@@ -172,166 +178,205 @@ São **63** tools MCP. **Os nomes dos argumentos** estão em inglês (schemas em
 
 ### Perfil
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `get_my_profile` | Retorna o perfil do colaborador autenticado (empresa, permissões, preferências). `GET /employees/me`. | ✅ |
+
+| Tool             | O que faz                                                                                             | Homologado |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | ---------- |
+| `get_my_profile` | Retorna o perfil do colaborador autenticado (empresa, permissões, preferências). `GET /employees/me`. | ✅          |
+
 
 ### Colaboradores (diretório)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_employees` | Lista colaboradores da empresa com paginação. `GET /employees`. | |
-| `get_employee` | Obtém um colaborador por id. `GET /employees/{id}`. | |
-| `get_employee_companies` | Empresas / vínculos do colaborador. `GET /employees/{id}/company`. | |
-| `find_employee_by_document` | Busca colaborador por documento. `GET /employees?document=…`. | |
+
+| Tool                        | O que faz                                                          | Homologado |
+| --------------------------- | ------------------------------------------------------------------ | ---------- |
+| `list_employees`            | Lista colaboradores da empresa com paginação. `GET /employees`.    |            |
+| `get_employee`              | Obtém um colaborador por id. `GET /employees/{id}`.                |            |
+| `get_employee_companies`    | Empresas / vínculos do colaborador. `GET /employees/{id}/company`. |            |
+| `find_employee_by_document` | Busca colaborador por documento. `GET /employees?document=…`.      |            |
+
 
 ### Colaboradores (mutações)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `invite_employee` | Convida colaborador. `POST /employees/invite` (corpo JSON conforme API). | |
-| `create_employee` | Cria colaborador. `POST /employees/create`. | |
-| `update_employee` | Atualiza colaborador. `PUT /employees/{id}`. | |
-| `update_employee_preference` | Atualiza preferências. `PUT /employees/{id}/preference`. | |
-| `deactivate_employee` | Desativa colaborador. `DELETE /employees/{id}`. | |
+
+| Tool                         | O que faz                                                                | Homologado |
+| ---------------------------- | ------------------------------------------------------------------------ | ---------- |
+| `invite_employee`            | Convida colaborador. `POST /employees/invite` (corpo JSON conforme API). |            |
+| `create_employee`            | Cria colaborador. `POST /employees/create`.                              |            |
+| `update_employee`            | Atualiza colaborador. `PUT /employees/{id}`.                             |            |
+| `update_employee_preference` | Atualiza preferências. `PUT /employees/{id}/preference`.                 |            |
+| `deactivate_employee`        | Desativa colaborador. `DELETE /employees/{id}`.                          |            |
+
 
 ### Despesas
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_expenses` | Lista despesas; por padrão só as do usuário autenticado (`userId` + `user[]`). Filtros: datas, estado, RDV, usuário, empresa. | ✅ |
-| `get_expense` | Obtém uma despesa por id. `GET /expense/expenditure/{id}`. | |
-| `create_expense` | Cria despesa manual. `POST /expense/expenditure`. Envia **ou** `amount` (centavos) **ou** `amount_brl` (reais), não ambos. | ✅ |
-| `attach_to_expense` | Anexa um arquivo a uma despesa (modo web JSON ou multipart legado; veja a seção **Anexos** mais abaixo). | |
-| `create_expense_on_latest_trip` | Cria despesa ligada ao RDV mais recente (mesma resolução que `get_my_latest_rdv`), data a partir da viagem, `amount_brl` convertido para a API. | |
+
+| Tool                            | O que faz                                                                                                                                       | Homologado |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `list_expenses`                 | Lista despesas; por padrão só as do usuário autenticado (`userId` + `user[]`). Filtros: datas, estado, RDV, usuário, empresa.                   | ✅          |
+| `get_expense`                   | Obtém uma despesa por id. `GET /expense/expenditure/{id}`.                                                                                      |            |
+| `create_expense`                | Cria despesa manual. `POST /expense/expenditure`. Envia **ou** `amount` (centavos) **ou** `amount_brl` (reais), não ambos.                      | ✅          |
+| `attach_to_expense`             | Anexa um arquivo a uma despesa (modo web JSON ou multipart legado; veja a seção **Anexos** mais abaixo).                                        |            |
+| `create_expense_on_latest_trip` | Cria despesa ligada ao RDV mais recente (mesma resolução que `get_my_latest_rdv`), data a partir da viagem, `amount_brl` convertido para a API. |            |
+
 
 ### Tipos de despesa
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_expense_types` | Lista tipos de despesa. `GET /expense/expenditure-type`. | |
-| `create_expense_type` | Cria tipo de despesa. `POST /expense/expenditure-type`. | |
+
+| Tool                  | O que faz                                                | Homologado |
+| --------------------- | -------------------------------------------------------- | ---------- |
+| `list_expense_types`  | Lista tipos de despesa. `GET /expense/expenditure-type`. |            |
+| `create_expense_type` | Cria tipo de despesa. `POST /expense/expenditure-type`.  |            |
+
 
 ### RDV (relatórios de viagem)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_rdvs` | Lista RDVs; por padrão, somente os do usuário autenticado. Para obter o “último RDV”, use `get_my_latest_rdv`. | |
-| `get_my_latest_rdv` | RDV mais recente do usuário (`GET /expense/rdv` ou *fallback* via despesas e `GET /expense/rdv/{id}`). | |
-| `get_rdv` | Obtém um RDV por id. `GET /expense/rdv/{id}`. | |
-| `submit_rdv_for_approval` | Submete RDV ao fluxo de aprovação. `POST /expense/rdv`. | |
-| `update_rdv` | Atualiza RDV. `PUT /expense/rdv/{id}`. | |
+
+| Tool                      | O que faz                                                                                                      | Homologado |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------- |
+| `list_rdvs`               | Lista RDVs; por padrão, somente os do usuário autenticado. Para obter o “último RDV”, use `get_my_latest_rdv`. |            |
+| `get_my_latest_rdv`       | RDV mais recente do usuário (`GET /expense/rdv` ou *fallback* via despesas e `GET /expense/rdv/{id}`).         |            |
+| `get_rdv`                 | Obtém um RDV por id. `GET /expense/rdv/{id}`.                                                                  |            |
+| `submit_rdv_for_approval` | Submete RDV ao fluxo de aprovação. `POST /expense/rdv`.                                                        |            |
+| `update_rdv`              | Atualiza RDV. `PUT /expense/rdv/{id}`.                                                                         |            |
+
 
 ### Aprovações
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_approvals` | Lista itens pendentes de aprovação (despesas, viagens, adiantamentos, etc.). `GET /general/approval`. | |
-| `approve_request` | Aprova pelo *slug* retornado em `list_approvals`. `POST /general/approval/approve/{slug}`. | |
-| `reprove_request` | Rejeita pelo *slug*, com motivo. `POST /general/approval/reprove/{slug}`. | |
-| `pay_request` | Marca item como pago pelo *slug*. `POST /general/approval/pay/{slug}`. | |
+
+| Tool              | O que faz                                                                                             | Homologado |
+| ----------------- | ----------------------------------------------------------------------------------------------------- | ---------- |
+| `list_approvals`  | Lista itens pendentes de aprovação (despesas, viagens, adiantamentos, etc.). `GET /general/approval`. |            |
+| `approve_request` | Aprova pelo *slug* retornado em `list_approvals`. `POST /general/approval/approve/{slug}`.            |            |
+| `reprove_request` | Rejeita pelo *slug*, com motivo. `POST /general/approval/reprove/{slug}`.                             |            |
+| `pay_request`     | Marca item como pago pelo *slug*. `POST /general/approval/pay/{slug}`.                                |            |
+
 
 ### Adiantamentos
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_advance_payments` | Lista adiantamentos. `GET /expense/advance-payment`. | |
-| `get_advance_payment` | Obtém adiantamento por id. `GET /expense/advance-payment/{id}`. | |
-| `update_advance_payment` | Atualiza adiantamento. `PUT /expense/advance-payment/{id}`. | |
-| `archive_advance_payment` | Arquiva adiantamento. `PUT /expense/advance-payment/archive/{id}`. | |
-| `delete_advance_payment` | Remove adiantamento. `DELETE /expense/advance-payment/{id}`. | |
+
+| Tool                      | O que faz                                                          | Homologado |
+| ------------------------- | ------------------------------------------------------------------ | ---------- |
+| `list_advance_payments`   | Lista adiantamentos. `GET /expense/advance-payment`.               |            |
+| `get_advance_payment`     | Obtém adiantamento por id. `GET /expense/advance-payment/{id}`.    |            |
+| `update_advance_payment`  | Atualiza adiantamento. `PUT /expense/advance-payment/{id}`.        |            |
+| `archive_advance_payment` | Arquiva adiantamento. `PUT /expense/advance-payment/archive/{id}`. |            |
+| `delete_advance_payment`  | Remove adiantamento. `DELETE /expense/advance-payment/{id}`.       |            |
+
 
 ### Viagem (reservas)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_travel_orders` | Lista reservas por tipo (voo, hotel, ônibus, carro). `GET /travel/order/{type}-order`. | |
-| `get_travel_order` | Obtém uma reserva por tipo e id. | |
+
+| Tool                 | O que faz                                                                              | Homologado |
+| -------------------- | -------------------------------------------------------------------------------------- | ---------- |
+| `list_travel_orders` | Lista reservas por tipo (voo, hotel, ônibus, carro). `GET /travel/order/{type}-order`. |            |
+| `get_travel_order`   | Obtém uma reserva por tipo e id.                                                       |            |
+
 
 ### Viagem (hotéis)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `search_hotel_destinations` | Resolve o destino para busca de hotel. `GET /geolocation/search-destination`. | |
-| `search_hotels` | Busca disponibilidade de hotéis. `GET /hotel/search`. | |
+
+| Tool                        | O que faz                                                                     | Homologado |
+| --------------------------- | ----------------------------------------------------------------------------- | ---------- |
+| `search_hotel_destinations` | Resolve o destino para busca de hotel. `GET /geolocation/search-destination`. |            |
+| `search_hotels`             | Busca disponibilidade de hotéis. `GET /hotel/search`.                         |            |
+
 
 ### Viagem (voos)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `update_fly_order` | Atualiza reserva de voo. `PUT /travel/order/fly-order/{id}`. | |
+
+| Tool               | O que faz                                                    | Homologado |
+| ------------------ | ------------------------------------------------------------ | ---------- |
+| `update_fly_order` | Atualiza reserva de voo. `PUT /travel/order/fly-order/{id}`. |            |
+
 
 ### Blue
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_blue_transactions` | Lista transações de cartão Blue. `GET /blue/transaction`. | |
-| `list_blue_internal_transactions` | Lista transações internas Blue. `GET /blue/transaction/internal`. | |
-| `list_blue_cards` | Lista cartões Blue. `GET /blue/card`. | |
-| `get_blue_card` | Obtém cartão Blue por id. `GET /blue/card/{id}`. | |
-| `update_blue_card_balance` | Atualiza saldo / operação financeira no cartão. `PUT /blue/card/{id}/balance`. | |
+
+| Tool                              | O que faz                                                                      | Homologado |
+| --------------------------------- | ------------------------------------------------------------------------------ | ---------- |
+| `list_blue_transactions`          | Lista transações de cartão Blue. `GET /blue/transaction`.                      |            |
+| `list_blue_internal_transactions` | Lista transações internas Blue. `GET /blue/transaction/internal`.              |            |
+| `list_blue_cards`                 | Lista cartões Blue. `GET /blue/card`.                                          |            |
+| `get_blue_card`                   | Obtém cartão Blue por id. `GET /blue/card/{id}`.                               |            |
+| `update_blue_card_balance`        | Atualiza saldo / operação financeira no cartão. `PUT /blue/card/{id}/balance`. |            |
+
 
 ### Créditos
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_credits_by_consumer` | Lista créditos agrupados por consumidor. `GET /credits/groupByConsumer`. | |
+
+| Tool                       | O que faz                                                                | Homologado |
+| -------------------------- | ------------------------------------------------------------------------ | ---------- |
+| `list_credits_by_consumer` | Lista créditos agrupados por consumidor. `GET /credits/groupByConsumer`. |            |
+
 
 ### Integração Onfly
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `put_integration_metadata` | Sincroniza metadados de integração (ex.: ERP: usuário, centro de custo, tag). `PUT /integration/metadata/{hash}`. | |
-| `create_integration_expenditure` | Cria despesa via integração (cartão / payload de integração). `POST /integration/expenditure`. | |
+
+| Tool                             | O que faz                                                                                                         | Homologado |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- |
+| `put_integration_metadata`       | Sincroniza metadados de integração (ex.: ERP: usuário, centro de custo, tag). `PUT /integration/metadata/{hash}`. |            |
+| `create_integration_expenditure` | Cria despesa via integração (cartão / payload de integração). `POST /integration/expenditure`.                    |            |
+
 
 ### Anexos (API geral)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `get_attachment_by_receipt` | Obtém anexo associado a um recibo. `GET /general/attachment/{receiptId}`. | |
-| `get_rdv_attachment` | Obtém anexo no *namespace* de um RDV. `GET /general/attachment/{table_type}/{rdv_id}`. | |
+
+| Tool                        | O que faz                                                                              | Homologado |
+| --------------------------- | -------------------------------------------------------------------------------------- | ---------- |
+| `get_attachment_by_receipt` | Obtém anexo associado a um recibo. `GET /general/attachment/{receiptId}`.              |            |
+| `get_rdv_attachment`        | Obtém anexo no *namespace* de um RDV. `GET /general/attachment/{table_type}/{rdv_id}`. |            |
+
 
 ### Configurações (somente leitura)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `list_employee_groups` | Lista grupos de colaboradores. `GET /employee-groups`. | |
-| `list_cost_centers` | Lista centros de custo. `GET /settings/cost-center`. | |
-| `list_tags` | Lista etiquetas. `GET /settings/tag`. | |
-| `get_company` | Dados da empresa. `GET /company`. | |
-| `get_general_settings` | Configurações gerais. `GET /settings/general`. | |
-| `list_budgets` | Lista orçamentos. `GET /settings/budget`. | |
-| `get_budget` | Obtém orçamento por id. `GET /settings/budget/{id}`. | |
-| `list_travel_policy_approval_groups` | Lista grupos de aprovação da política de viagem. `GET /settings/travel-policy/approval-group`. | |
-| `get_travel_policy_approval_group` | Obtém grupo de aprovação por id. | |
-| `list_travel_policy_rules` | Lista regras da política de viagem. `GET /settings/travel-policy/policy`. | |
-| `list_custom_fields_v3` | Lista campos personalizados (v3). `GET /settings/custom-fields-v3`. | |
-| `get_travel_policy_rule` | Obtém regra de política por id. `GET /settings/travel-policy/policy/{id}`. | |
+
+| Tool                                 | O que faz                                                                                      | Homologado |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------- | ---------- |
+| `list_employee_groups`               | Lista grupos de colaboradores. `GET /employee-groups`.                                         |            |
+| `list_cost_centers`                  | Lista centros de custo. `GET /settings/cost-center`.                                           |            |
+| `list_tags`                          | Lista etiquetas. `GET /settings/tag`.                                                          |            |
+| `get_company`                        | Dados da empresa. `GET /company`.                                                              |            |
+| `get_general_settings`               | Configurações gerais. `GET /settings/general`.                                                 |            |
+| `list_budgets`                       | Lista orçamentos. `GET /settings/budget`.                                                      |            |
+| `get_budget`                         | Obtém orçamento por id. `GET /settings/budget/{id}`.                                           |            |
+| `list_travel_policy_approval_groups` | Lista grupos de aprovação da política de viagem. `GET /settings/travel-policy/approval-group`. |            |
+| `get_travel_policy_approval_group`   | Obtém grupo de aprovação por id.                                                               |            |
+| `list_travel_policy_rules`           | Lista regras da política de viagem. `GET /settings/travel-policy/policy`.                      |            |
+| `list_custom_fields_v3`              | Lista campos personalizados (v3). `GET /settings/custom-fields-v3`.                            |            |
+| `get_travel_policy_rule`             | Obtém regra de política por id. `GET /settings/travel-policy/policy/{id}`.                     |            |
+
 
 ### Configurações (escrita)
 
-| Tool | O que faz | Homologado |
-|------|-----------|------------|
-| `create_cost_center` | Cria centro de custo. `POST /settings/cost-center`. | |
-| `update_cost_center` | Atualiza centro de custo. `PUT /settings/cost-center/{id}`. | |
-| `delete_cost_center` | Remove centro de custo. `DELETE /settings/cost-center/{id}`. | |
-| `create_tag` | Cria etiqueta. `POST /settings/tag`. | |
-| `update_custom_field` | Atualiza campo personalizado. `PUT /settings/custom-fields/{id}`. | |
+
+| Tool                  | O que faz                                                         | Homologado |
+| --------------------- | ----------------------------------------------------------------- | ---------- |
+| `create_cost_center`  | Cria centro de custo. `POST /settings/cost-center`.               |            |
+| `update_cost_center`  | Atualiza centro de custo. `PUT /settings/cost-center/{id}`.       |            |
+| `delete_cost_center`  | Remove centro de custo. `DELETE /settings/cost-center/{id}`.      |            |
+| `create_tag`          | Cria etiqueta. `POST /settings/tag`.                              |            |
+| `update_custom_field` | Atualiza campo personalizado. `PUT /settings/custom-fields/{id}`. |            |
+
 
 ---
 
 ## Anexos (`attach_to_expense`)
 
-Para espelhar o **front-end** Onfly, o modo por padrão envia **JSON** para:
+Fluxo prioritário (igual ao da plataforma/web app):
 
-`POST /general/attachments/4/1/{expenditure_id}/true`  
+`POST /general/attachments/4/1/{expenditure_id}/true` com JSON  
+`{ "files": [ { "file": "data:image/jpeg;base64,...", "filename": "..." } ] }`
 
-com corpo `{ "files": [ { "file": "data:…;base64,…", "filename": "…" } ] }`.
-
-- Use o argumento **`file`** (não um nome genérico em base64) + **`filename`**, ou o array **`files`**.
-- Para arquivos grandes, **`file_path`** lê o arquivo no servidor e evita truncamento no *payload* da tool.
-- Secundário: `upload_mode: collection_multipart` → `POST /general/attachment/4/1/{id}` com **multipart** `file` (estilo coleção antiga).
+- **Modo padrão (`web_app_json`):** usa exatamente esse formato (`files[].file` + `files[].filename`).
+- `**file` + `filename`** (ou array `files`) é o formato recomendado para o agente.
+- Nos argumentos da tool: `**file**` (data URL ou base64) + `**filename**`, ou `**files**`. O `**file_path**` existe **só no MCP**: o servidor lê esse caminho **na máquina onde o onfly-mcp roda** e monta o mesmo upload (bytes no `file`); não é um parâmetro da API Onfly.
+- Arquivos grandes: `**file_path`** reduz o tamanho do JSON da tool (o arquivo continua indo como `file` na wire).
+- Contrato multipart documentado também existe: `POST /general/attachment/4/1/{expenditure_id}` com campo `**file**` (equivalente a `curl --form 'file=@"/caminho/local/img.jpeg"'`), disponível via `upload_mode: collection_multipart`.
 - Falha no modo web com **um** arquivo pode acionar **fallback** automático para multipart.
+
+**Tamanho do anexo (Onfly):** até **10 MiB** por arquivo (decodificado); a tool recusa antes do envio se ultrapassar.
+
+**Timeout no Claude / “No result received” com anexos:** o servidor usa `express.json` com limite alto (`MCP_JSON_BODY_LIMIT`, padrão **18mb**, suficiente para ~~10 MiB em base64 no JSON-RPC). O limite padrão do Express (~~100kb) descarta corpos maiores e o cliente pode ficar minutos à espera. Aumente `MCP_JSON_BODY_LIMIT` se precisar de margem; com `MCP_DEBUG=1`, payloads grandes de `attach_to_expense` são truncados no log para não bloquear o processo.
 
 ---
 
@@ -357,16 +402,19 @@ onfly-mcp/
 
 ## Scripts
 
-| Comando | Descrição |
-|---------|-----------|
-| `npm run dev` | `tsx watch` com `MCP_DEBUG=1` |
-| `npm run dev:quiet` | *Watch* sem debug |
-| `npm run build` | `tsc` → `dist/` |
-| `npm start` | `node dist/index.js` |
-| `npm run typecheck` | `tsc --noEmit` |
+
+| Comando             | Descrição                     |
+| ------------------- | ----------------------------- |
+| `npm run dev`       | `tsx watch` com `MCP_DEBUG=1` |
+| `npm run dev:quiet` | *Watch* sem debug             |
+| `npm run build`     | `tsc` → `dist/`               |
+| `npm start`         | `node dist/index.js`          |
+| `npm run typecheck` | `tsc --noEmit`                |
+
 
 ---
 
 ## Documentação adicional
 
 - **Documentação oficial da API Onfly:** [https://onfly.travel/api-doc](https://onfly.travel/api-doc) — contratos REST, autenticação e referência dos *endpoints*.
+

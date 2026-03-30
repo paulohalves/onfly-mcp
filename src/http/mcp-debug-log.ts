@@ -1,5 +1,35 @@
 import { filterPII } from '../api/response-filter.js';
 
+const ATTACH_LOG_PREVIEW = 120;
+
+/** Avoid stringifying multi‑MB base64 in logs (blocks the event loop and slows MCP responses). */
+function redactAttachToExpenseArgsForLog(args: unknown): unknown {
+  if (args === null || typeof args !== 'object') {
+    return args;
+  }
+  const a = args as Record<string, unknown>;
+  const out = { ...a };
+  if (typeof out.file === 'string' && out.file.length > ATTACH_LOG_PREVIEW) {
+    out.file = `<redacted; ${out.file.length} chars> ${out.file.slice(0, ATTACH_LOG_PREVIEW)}…`;
+  }
+  if (Array.isArray(out.files)) {
+    out.files = out.files.map((entry) => {
+      if (entry === null || typeof entry !== 'object') {
+        return entry;
+      }
+      const f = entry as Record<string, unknown>;
+      if (typeof f.file === 'string' && f.file.length > ATTACH_LOG_PREVIEW) {
+        return {
+          ...f,
+          file: `<redacted; ${f.file.length} chars> ${f.file.slice(0, ATTACH_LOG_PREVIEW)}…`,
+        };
+      }
+      return entry;
+    });
+  }
+  return out;
+}
+
 function asMessageArray(body: unknown): unknown[] {
   if (Array.isArray(body)) {
     return body;
@@ -76,7 +106,10 @@ function logJsonRpcParamsDetail(messages: unknown[]): void {
     if (method === 'tools/call' && m.params) {
       const toolName =
         typeof m.params.name === 'string' ? m.params.name : String(m.params.name ?? '?');
-      const args = m.params.arguments;
+      const args =
+        toolName === 'attach_to_expense'
+          ? redactAttachToExpenseArgsForLog(m.params.arguments)
+          : m.params.arguments;
       line(`  params tools/call "${toolName}" → arguments (PII redacted):`);
       console.log(stringifyPretty(args, 16_000));
       continue;

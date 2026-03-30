@@ -19,5 +19,5 @@ export function jsonTextResult(data: unknown): { content: Array<{ type: 'text'; 
 
 export function newClient(extra: McpExtra, limiter: TokenBucketLimiter): OnflyApiClient {
   const token = getAccessToken(extra);
-  return new OnflyApiClient(config.apiBaseUrl, token, limiter);
+  return new OnflyApiClient(config.apiBaseUrl, token, limiter, config.apiTimeoutMs);
 }

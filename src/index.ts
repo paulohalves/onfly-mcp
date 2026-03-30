@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import type { RequestHandler, Response } from 'express';
+import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 
 import { devOnflyAuthMiddleware } from './auth/dev-bearer.js';
 import { config } from './config.js';
 import { mcpRequestDebug } from './http/mcp-debug-log.js';
+import { createOnflyMcpExpressApp } from './http/mcp-express-app.js';
 import { mcpSessionHttp } from './http/mcp-session-http.js';
 import { InMemoryEventStore } from './infra/in-memory-event-store.js';
 import { createOnflyMcpServer } from './server/create-onfly-mcp-server.js';
@@ -21,6 +21,24 @@ const methodNotAllowedJson = (): RequestHandler => (_req, res) => {
   });
 };
 
+const jsonBodyTooLargeHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  const e = err as { status?: number; type?: string; message?: string };
+  if (e.status === 413 || e.type === 'entity.too.large') {
+    if (!res.headersSent) {
+      res.status(413).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: `MCP request body too large for JSON parser (${e.message ?? '413'}). Increase MCP_JSON_BODY_LIMIT (current ${config.mcpJsonBodyLimit}) or use a smaller image.`,
+        },
+        id: null,
+      });
+    }
+    return;
+  }
+  next(err);
+};
+
 function bindTransportCleanup(transport: StreamableHTTPServerTransport, server: ReturnType<typeof createOnflyMcpServer>, res: Response): void {
   res.on('close', () => {
     void transport.close().catch(() => {});
@@ -28,7 +46,10 @@ function bindTransportCleanup(transport: StreamableHTTPServerTransport, server: 
   });
 }
 
-const app = createMcpExpressApp({ host: config.mcpHost });
+const app = createOnflyMcpExpressApp({
+  host: config.mcpHost,
+  jsonBodyLimit: config.mcpJsonBodyLimit,
+});
 app.use('/mcp', devOnflyAuthMiddleware);
 
 /** One POST = one fresh transport (no session header). Matches SDK simpleStatelessStreamableHttp. */
@@ -116,16 +137,6 @@ if (config.mcpStreamableMode === 'stateless') {
   app.post('/mcp', mcpPostStateless);
   app.get('/mcp', methodNotAllowedJson());
   app.delete('/mcp', methodNotAllowedJson());
-  app.listen(config.mcpPort, config.mcpHost, () => {
-    console.log(
-      `Onfly MCP (stateless HTTP) on http://${config.mcpHost}:${config.mcpPort}/mcp — API ${config.apiBaseUrl}`,
-    );
-    if (config.mcpDebug) {
-      console.log(
-        'MCP_DEBUG=1: logging JSON-RPC methods, tool names, and params (PII fields redacted).',
-      );
-    }
-  });
 } else {
   const mcpGetHandler: RequestHandler = async (req, res) => {
     const sessionId = mcpSessionHttp.getSessionId(req);
@@ -150,18 +161,22 @@ if (config.mcpStreamableMode === 'stateless') {
   app.post('/mcp', mcpPostStateful);
   app.get('/mcp', mcpGetHandler);
   app.delete('/mcp', mcpDeleteHandler);
-
-  app.listen(config.mcpPort, config.mcpHost, () => {
-    console.log(
-      `Onfly MCP on http://${config.mcpHost}:${config.mcpPort}/mcp (API: ${config.apiBaseUrl})`,
-    );
-    if (config.mcpDebug) {
-      console.log(
-        'MCP_DEBUG=1: logging JSON-RPC methods, tool names, and params (PII fields redacted).',
-      );
-    }
-  });
 }
+
+app.use(jsonBodyTooLargeHandler);
+
+app.listen(config.mcpPort, config.mcpHost, () => {
+  const modeLabel =
+    config.mcpStreamableMode === 'stateless' ? 'stateless HTTP' : 'session + SSE';
+  console.log(
+    `Onfly MCP (${modeLabel}) on http://${config.mcpHost}:${config.mcpPort}/mcp — API ${config.apiBaseUrl} — JSON limit ${config.mcpJsonBodyLimit}`,
+  );
+  if (config.mcpDebug) {
+    console.log(
+      'MCP_DEBUG=1: logging JSON-RPC methods, tool names, and params (PII fields redacted).',
+    );
+  }
+});
 
 process.on('SIGINT', async () => {
   for (const id of Object.keys(transports)) {
