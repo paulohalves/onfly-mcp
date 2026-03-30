@@ -236,6 +236,7 @@ São **63** tools MCP. **Os nomes dos argumentos** estão em inglês (schemas em
 | `list_rdvs`               | Lista RDVs; por padrão, somente os do usuário autenticado. Para obter o “último RDV”, use `get_my_latest_rdv`. |            |
 | `get_my_latest_rdv`       | RDV mais recente do usuário (`GET /expense/rdv` ou *fallback* via despesas e `GET /expense/rdv/{id}`).         |            |
 | `get_rdv`                 | Obtém um RDV por id. `GET /expense/rdv/{id}`.                                                                  |            |
+| `create_rdv`              | Cadastra novo relatório de despesas de viagem. `POST /expense/rdv` (corpo de criação: título, motivo, centro de custo, anexos opcionais). |            |
 | `submit_rdv_for_approval` | Submete RDV ao fluxo de aprovação. `POST /expense/rdv`.                                                        |            |
 | `update_rdv`              | Atualiza RDV. `PUT /expense/rdv/{id}`.                                                                         |            |
 

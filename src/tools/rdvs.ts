@@ -5,12 +5,26 @@ import type { TokenBucketLimiter } from '../api/rate-limiter.js';
 import { getAuthenticatedEmployeeId } from '../utils/authenticated-user.js';
 import { includeForRdv } from '../utils/include-defaults.js';
 import { fetchLatestRdvForUser } from '../utils/latest-rdv.js';
+import { readCreatedEntityId } from '../utils/onfly-payload.js';
+import { buildCreateRdvPayload } from '../utils/rdv-create-payload.js';
 import { appendParam } from '../utils/query.js';
 import { resolveExpenseRdvStatus } from '../utils/status-mapper.js';
 
 import { jsonTextResult, newClient } from './common.js';
 
 const bodyRecord = z.record(z.string(), z.unknown());
+
+const rdvAnnexesSchema = z
+  .object({
+    expenditures_id: z.array(z.number().int()).optional(),
+    fly_orders_id: z.array(z.number().int()).optional(),
+    hotel_orders_id: z.array(z.number().int()).optional(),
+    auto_orders_id: z.array(z.number().int()).optional(),
+    bus_orders_id: z.array(z.number().int()).optional(),
+  })
+  .optional();
+
+const customFieldItemSchema = z.record(z.string(), z.unknown());
 
 const rdvStatusInput = z.union([
   z.number().int(),
@@ -206,6 +220,73 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
       const client = newClient(extra, limiter);
       const data = await client.put(`/expense/rdv/${id}`, body);
       return jsonTextResult(data);
+    },
+  );
+
+  server.registerTool(
+    'create_rdv',
+    {
+      title: 'Create RDV (travel expense report)',
+      description:
+        'Creates a new travel expense report (prestação de contas / RDV) via POST /expense/rdv (Onfly “POST Criar RDV”). Requires title, reason, cost_center_id. user_id defaults to the authenticated employee. Optional annexes link expenditures and travel orders; tags_id, advance_payments_id, custom_fields follow the API — custom fields may be required by your company policy.',
+      inputSchema: {
+        title: z.string().min(1),
+        reason: z.string().min(1),
+        cost_center_id: z.number().int(),
+        user_id: z.number().int().optional(),
+        annexes: rdvAnnexesSchema,
+        tags_id: z.array(z.number().int()).optional(),
+        advance_payments_id: z.array(z.number().int()).optional(),
+        custom_fields: z.array(customFieldItemSchema).optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (
+      {
+        title,
+        reason,
+        cost_center_id,
+        user_id,
+        annexes,
+        tags_id,
+        advance_payments_id,
+        custom_fields,
+      },
+      extra,
+    ) => {
+      const client = newClient(extra, limiter);
+      const ownerId = user_id ?? (await getAuthenticatedEmployeeId(client));
+      const payload = buildCreateRdvPayload({
+        title,
+        reason,
+        user_id: ownerId,
+        cost_center_id,
+        annexes,
+        tags_id,
+        advance_payments_id,
+        custom_fields,
+      });
+      try {
+        const data = await client.post('/expense/rdv', payload);
+        return jsonTextResult({
+          success: true,
+          rdv_id: readCreatedEntityId(data),
+          api: data,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return jsonTextResult({
+          success: false,
+          error: message,
+          hint:
+            'Verify cost_center_id, user_id, annexed expenditure/order ids, and any required customFields for your tenant.',
+        });
+      }
     },
   );
 }
