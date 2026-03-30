@@ -11,12 +11,12 @@ import { jsonTextResult, newClient } from './common.js';
 
 const travelType = z.enum(['fly', 'hotel', 'bus', 'auto']);
 
-function orderPath(type: z.infer<typeof travelType>): string {
+export function orderPath(type: z.infer<typeof travelType>): string {
   return `/travel/order/${type}-order`;
 }
 
 /** Checks whether a travel order belongs to the given userId. */
-function orderBelongsToUser(order: unknown, userId: number): boolean {
+export function orderBelongsToUser(order: unknown, userId: number): boolean {
   if (!order || typeof order !== 'object') {
     return false;
   }
