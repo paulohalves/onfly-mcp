@@ -228,15 +228,35 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
     {
       title: 'Create RDV (travel expense report)',
       description:
-        'Creates a new travel expense report (prestação de contas / RDV) via POST /expense/rdv (Onfly “POST Criar RDV”). Requires title, reason, cost_center_id. user_id defaults to the authenticated employee. Optional annexes link expenditures and travel orders; tags_id, advance_payments_id, custom_fields follow the API — custom fields may be required by your company policy.',
+        'Creates a new travel expense report (prestação de contas / RDV) via POST /expense/rdv. Requires title and cost_center_id. reason is optional (API accepts null). For a trip window, pass start_trip_date and end_trip_date as YYYY-MM-DD; is_manual_trip_automation defaults to true when either date is set (Onfly manual trip). Body includes tagsId, advancePaymentsId, customFields, blueRequestsId as arrays (empty unless you pass ids). user_id defaults to the authenticated employee.',
       inputSchema: {
         title: z.string().min(1),
-        reason: z.string().min(1),
+        reason: z
+          .string()
+          .min(1)
+          .nullable()
+          .optional()
+          .describe('Motivo / notes; omit or null if the API should receive reason: null'),
         cost_center_id: z.number().int(),
         user_id: z.number().int().optional(),
+        start_trip_date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe('Trip start YYYY-MM-DD → startTripDate'),
+        end_trip_date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe('Trip end YYYY-MM-DD → endTripDate'),
+        is_manual_trip_automation: z
+          .boolean()
+          .optional()
+          .describe('Defaults to true when start_trip_date or end_trip_date is set'),
         annexes: rdvAnnexesSchema,
         tags_id: z.array(z.number().int()).optional(),
         advance_payments_id: z.array(z.number().int()).optional(),
+        blue_requests_id: z.array(z.number().int()).optional(),
         custom_fields: z.array(customFieldItemSchema).optional(),
       },
       annotations: {
@@ -252,9 +272,13 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
         reason,
         cost_center_id,
         user_id,
+        start_trip_date,
+        end_trip_date,
+        is_manual_trip_automation,
         annexes,
         tags_id,
         advance_payments_id,
+        blue_requests_id,
         custom_fields,
       },
       extra,
@@ -263,12 +287,16 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
       const ownerId = user_id ?? (await getAuthenticatedEmployeeId(client));
       const payload = buildCreateRdvPayload({
         title,
-        reason,
+        reason: reason === undefined ? null : reason,
         user_id: ownerId,
         cost_center_id,
+        start_trip_date,
+        end_trip_date,
+        is_manual_trip_automation,
         annexes,
         tags_id,
         advance_payments_id,
+        blue_requests_id,
         custom_fields,
       });
       try {
@@ -284,7 +312,7 @@ export function registerRdvTools(server: McpServer, limiter: TokenBucketLimiter)
           success: false,
           error: message,
           hint:
-            'Verify cost_center_id, user_id, annexed expenditure/order ids, and any required customFields for your tenant.',
+            'Verify cost_center_id, user_id, start_trip_date/end_trip_date (YYYY-MM-DD), annexed ids, and any required customFields for your tenant.',
         });
       }
     },
